@@ -200,8 +200,12 @@
 
         /**
          * CSVファイルを読み込む関数
+         * 指定された範囲の番号のみを読み込むように修正
          */
         async function loadQuestionsFromCSV() {
+            const start = parseInt(document.getElementById('startNum').value, 10);
+            const end = parseInt(document.getElementById('endNum').value, 10);
+
             try {
                 const response = await fetch('kanji_data.csv', { cache: 'no-cache' });
                 if (!response.ok) throw new Error('CSVファイルが見つかりません。');
@@ -213,22 +217,37 @@
                 for (let i = 1; i < rows.length; i++) {
                     const row = rows[i];
                     if (row.length >= 5 && row[0]) {
-                        questions.push({
-                            id: parseInt(row[0], 10),
-                            kanji: row[1] || "",
-                            onyomi: row[2] || "-",
-                            kunyomi: row[3] || "-",
-                            jukugo: row[4] || "-",
-                            correct: parseInt(row[5], 10) || 0,
-                            incorrect: parseInt(row[6], 10) || 0
-                        });
+                        const id = parseInt(row[0], 10);
+                        // 指定された範囲内（開始番号〜終了番号）のIDのみ配列に追加
+                        if (id >= start && id <= end) {
+                            questions.push({
+                                id: id,
+                                kanji: row[1] || "",
+                                onyomi: row[2] || "-",
+                                kunyomi: row[3] || "-",
+                                jukugo: row[4] || "-",
+                                correct: parseInt(row[5], 10) || 0,
+                                incorrect: parseInt(row[6], 10) || 0
+                            });
+                        }
                     }
                 }
                 
                 if(questions.length > 0) {
-                    document.getElementById('endNum').value = questions[questions.length - 1].id;
-                    showMessage(`CSVから ${questions.length} 件のデータを同期しました。`);
+                    showMessage(`番号 ${start} から ${end} の範囲で ${questions.length} 件のデータを読み込みました。`);
+                } else {
+                    showMessage(`指定された範囲（${start}〜${end}）にデータが見つかりませんでした。`);
                 }
+                
+                // 読み込み後、現在の問題が範囲外になった場合に備えてリセット
+                currentQuestion = null;
+                document.getElementById('q-num').textContent = '';
+                document.getElementById('q-on').textContent = '';
+                document.getElementById('q-kun').textContent = '';
+                document.getElementById('q-jukugo').textContent = '';
+                document.getElementById('answer-text').textContent = '';
+                updateScoreDisplay();
+
             } catch (error) {
                 console.error(error);
                 showMessage('読み込み失敗: サーバー環境で実行してください。');
@@ -272,7 +291,7 @@
             link.click();
             document.body.removeChild(link);
             
-            showMessage("最新のCSVをダウンロードしました。");
+            showMessage("表示中のデータをCSVとしてダウンロードしました。");
         }
 
         /**
@@ -325,25 +344,27 @@
             const scoreContainer = document.getElementById('score-display');
             if (currentQuestion) {
                 const q = questions.find(item => item.id === currentQuestion.id);
-                document.getElementById('score-correct').textContent = q.correct;
-                document.getElementById('score-incorrect').textContent = q.incorrect;
-                scoreContainer.classList.remove('hidden');
+                if (q) {
+                    document.getElementById('score-correct').textContent = q.correct;
+                    document.getElementById('score-incorrect').textContent = q.incorrect;
+                    scoreContainer.classList.remove('hidden');
+                } else {
+                    scoreContainer.classList.add('hidden');
+                }
             } else {
                 scoreContainer.classList.add('hidden');
             }
         }
 
         function refreshQuestion() {
-            if (questions.length === 0) return;
-            const start = parseInt(document.getElementById('startNum').value, 10);
-            const end = parseInt(document.getElementById('endNum').value, 10);
-            const pool = questions.filter(q => q.id >= start && q.id <= end);
-            if (pool.length === 0) {
-                showMessage('範囲内にデータがありません。');
+            if (questions.length === 0) {
+                showMessage('データがありません。「CSVを再読込」してください。');
                 return;
             }
-
-            currentQuestion = pool[Math.floor(Math.random() * pool.length)];
+            
+            // 既にロード時に範囲指定されているため、questions 配列からランダムに選ぶだけでOK
+            currentQuestion = questions[Math.floor(Math.random() * questions.length)];
+            
             document.getElementById('q-num').textContent = currentQuestion.id;
             document.getElementById('q-on').textContent = currentQuestion.onyomi;
             document.getElementById('q-kun').textContent = currentQuestion.kunyomi;
