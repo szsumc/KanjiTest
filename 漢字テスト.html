@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>漢字勉強アプリ (CSV版)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif; }
+        .toast {
+            visibility: hidden;
+            min-width: 250px;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 8px;
+            padding: 16px;
+            position: fixed;
+            z-index: 50;
+            left: 50%;
+            bottom: 30px;
+            transform: translateX(-50%);
+            opacity: 0;
+            transition: opacity 0.3s, bottom 0.3s;
+        }
+        .toast.show { visibility: visible; opacity: 1; bottom: 50px; }
+        .answer-kanji { font-size: 8rem; line-height: 1; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 p-4 md:p-8">
+
+    <div class="max-w-5xl mx-auto">
+        <h1 class="text-2xl font-bold mb-2 text-gray-700">中一漢字勉強</h1>
+        <p class="text-xs text-gray-500 mb-6">データ元: 同フォルダ内の kanji_data.csv</p>
+
+        <!-- 設定エリア -->
+        <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6 flex items-center space-x-4">
+            <div class="flex items-center">
+                <label for="startNum" class="mr-2 text-sm font-medium">開始番号:</label>
+                <input type="number" id="startNum" value="1" min="1" class="border rounded px-2 py-1 w-20 text-center focus:outline-none focus:ring-2 focus:ring-blue-400">
+            </div>
+            <div class="flex items-center">
+                <label for="endNum" class="mr-2 text-sm font-medium">終了番号:</label>
+                <input type="number" id="endNum" value="100" min="1" class="border rounded px-2 py-1 w-20 text-center bg-yellow-50 focus:outline-none focus:ring-2 focus:ring-blue-400">
+            </div>
+            <button onclick="loadQuestionsFromCSV()" class="text-xs bg-gray-200 hover:bg-gray-300 px-3 py-1 rounded transition-colors">CSVを再読込</button>
+        </div>
+
+        <div class="flex flex-col md:flex-row gap-6">
+            
+            <!-- 左側：問題・答えエリア -->
+            <div class="flex-1 space-y-6">
+                <!-- 問題テーブル -->
+                <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                    <h2 class="text-lg font-bold p-3 bg-gray-100 border-b">問題</h2>
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="border-b text-sm text-gray-600">
+                                <th class="p-3 border-r w-1/6 text-center">番号</th>
+                                <th class="p-3 border-r w-1/6">音読み</th>
+                                <th class="p-3 border-r w-1/4">訓読み</th>
+                                <th class="p-3 w-5/12">熟語</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td id="q-num" class="p-3 border-r text-center text-xl font-bold h-14"></td>
+                                <td id="q-on" class="p-3 border-r text-lg"></td>
+                                <td id="q-kun" class="p-3 border-r text-lg"></td>
+                                <td id="q-jukugo" class="p-3 text-lg"></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- 答え表示エリア -->
+                <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex flex-col h-64 md:h-80">
+                    <h2 class="text-lg font-bold p-3 bg-gray-100 border-b">答え</h2>
+                    <div class="flex-1 flex items-center justify-center relative">
+                        <span id="answer-text" class="answer-kanji text-gray-800 select-all font-serif"></span>
+                        
+                        <!-- 成績表示 -->
+                        <div id="score-display" class="absolute bottom-4 right-4 text-sm text-gray-500 hidden">
+                            累計成績: <span class="text-green-600 font-bold">〇 <span id="score-correct">0</span></span> / <span class="text-red-600 font-bold">× <span id="score-incorrect">0</span></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右側：操作ボタンエリア -->
+            <div class="w-full md:w-64 flex flex-col gap-4">
+                <button onclick="refreshQuestion()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-6 rounded-lg shadow-md transition-colors text-lg">
+                    問題刷新
+                </button>
+                <button onclick="showAnswer()" class="bg-white hover:bg-gray-100 text-blue-600 font-bold py-4 rounded-lg shadow border border-blue-600 transition-colors text-lg">
+                    答え表示
+                </button>
+
+                <div class="flex gap-4 mt-4">
+                    <button onclick="markCorrect()" class="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-8 rounded-lg shadow transition-colors text-4xl flex items-center justify-center">
+                        〇
+                    </button>
+                    <button onclick="markIncorrect()" class="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-8 rounded-lg shadow transition-colors text-4xl flex items-center justify-center">
+                        ×
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <div id="toast" class="toast shadow-lg border border-gray-600"></div>
+
+    <script>
+        let questions = [];
+        // ローカルストレージのキーをCSV版用に分ける
+        let records = JSON.parse(localStorage.getItem('kanjiStudyRecords_CSV')) || {};
+        let currentQuestion = null;
+
+        function showMessage(msg) {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.classList.add('show');
+            setTimeout(() => { toast.classList.remove('show'); }, 3000);
+        }
+
+        /**
+         * CSVファイルを読み込む関数
+         */
+        async function loadQuestionsFromCSV() {
+            const csvUrl = 'kanji_data.csv';
+            try {
+                const response = await fetch(csvUrl);
+                if (!response.ok) throw new Error('CSVファイルが見つかりません。');
+                
+                const csvText = await response.text();
+                const rows = parseCSV(csvText);
+
+                questions = [];
+                // 1行目はヘッダーとしてスキップ
+                for (let i = 1; i < rows.length; i++) {
+                    const row = rows[i];
+                    if (row.length >= 5 && row[0]) {
+                        const id = parseInt(row[0], 10);
+                        questions.push({
+                            id: id,
+                            kanji: row[1] || "",
+                            onyomi: row[2] || "-",
+                            kunyomi: row[3] || "-",
+                            jukugo: row[4] || "-",
+                            // CSVに保存されている初期の成績（あれば）
+                            initialCorrect: parseInt(row[5], 10) || 0,
+                            initialIncorrect: parseInt(row[6], 10) || 0
+                        });
+
+                        // 記録の初期化
+                        if (!records[id]) {
+                            records[id] = { 
+                                correct: parseInt(row[5], 10) || 0, 
+                                incorrect: parseInt(row[6], 10) || 0 
+                            };
+                        }
+                    }
+                }
+                
+                if(questions.length > 0) {
+                    // 終了番号の初期値を最大IDに合わせる
+                    document.getElementById('endNum').value = questions[questions.length - 1].id;
+                    showMessage(`CSVから ${questions.length} 問のデータを読み込みました。`);
+                }
+            } catch (error) {
+                console.error(error);
+                showMessage('読み込み失敗: Webサーバー（Live Server等）経由で実行してください。');
+            }
+        }
+
+        /**
+         * CSVパース用ユーティリティ
+         */
+        function parseCSV(text) {
+            const lines = text.split(/\r?\n/);
+            return lines.map(line => {
+                const result = [];
+                let current = "";
+                let inQuotes = false;
+                for (let i = 0; i < line.length; i++) {
+                    const char = line[i];
+                    if (char === '"') {
+                        inQuotes = !inQuotes;
+                    } else if (char === ',' && !inQuotes) {
+                        result.push(current.trim());
+                        current = "";
+                    } else {
+                        current += char;
+                    }
+                }
+                result.push(current.trim());
+                return result;
+            }).filter(row => row.length > 1);
+        }
+
+        function saveRecords() {
+            localStorage.setItem('kanjiStudyRecords_CSV', JSON.stringify(records));
+            updateScoreDisplay();
+        }
+
+        function updateScoreDisplay() {
+            const scoreContainer = document.getElementById('score-display');
+            if (currentQuestion) {
+                const rec = records[currentQuestion.id] || { correct: 0, incorrect: 0 };
+                document.getElementById('score-correct').textContent = rec.correct;
+                document.getElementById('score-incorrect').textContent = rec.incorrect;
+                scoreContainer.classList.remove('hidden');
+            } else {
+                scoreContainer.classList.add('hidden');
+            }
+        }
+
+        function refreshQuestion() {
+            if (questions.length === 0) {
+                showMessage('データがありません。');
+                return;
+            }
+
+            const start = parseInt(document.getElementById('startNum').value, 10);
+            const end = parseInt(document.getElementById('endNum').value, 10);
+            const pool = questions.filter(q => q.id >= start && q.id <= end);
+
+            if (pool.length === 0) {
+                showMessage('指定範囲内に問題が見つかりません。');
+                return;
+            }
+
+            currentQuestion = pool[Math.floor(Math.random() * pool.length)];
+            
+            document.getElementById('q-num').textContent = currentQuestion.id;
+            document.getElementById('q-on').textContent = currentQuestion.onyomi;
+            document.getElementById('q-kun').textContent = currentQuestion.kunyomi;
+            document.getElementById('q-jukugo').textContent = currentQuestion.jukugo;
+            document.getElementById('answer-text').textContent = '';
+            
+            updateScoreDisplay();
+        }
+
+        function showAnswer() {
+            if (!currentQuestion) return;
+            document.getElementById('answer-text').textContent = currentQuestion.kanji;
+        }
+
+        function markCorrect() {
+            if (!currentQuestion) return;
+            const id = currentQuestion.id;
+            if (!records[id]) records[id] = { correct: 0, incorrect: 0 };
+            records[id].correct++;
+            saveRecords();
+            showMessage(`番号 ${id} を「〇」として記録しました。`);
+        }
+
+        function markIncorrect() {
+            if (!currentQuestion) return;
+            const id = currentQuestion.id;
+            if (!records[id]) records[id] = { correct: 0, incorrect: 0 };
+            records[id].incorrect++;
+            saveRecords();
+            showMessage(`番号 ${id} を「×」として記録しました。`);
+        }
+
+        // 起動時にロード
+        window.onload = loadQuestionsFromCSV;
+    </script>
+</body>
+</html>
