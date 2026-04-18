@@ -251,33 +251,6 @@
             showMessage("CSVをダウンロードしました。");
         }
 
-        /**
-         * サーバー上のCSVを更新 (POST)
-         */
-        async function updateCSVOnServer(id, isCorrect) {
-            try {
-                const response = await fetch('/api/update-score', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id, isCorrect })
-                });
-
-                if (response.ok) {
-                    const q = questions.find(item => item.id === id);
-                    if (q) {
-                        if (isCorrect) q.correct++; else q.incorrect++;
-                        updateScoreDisplay();
-                    }
-                    showMessage("記録をサーバーに保存しました。");
-                } else {
-                    throw new Error("保存失敗");
-                }
-            } catch (error) {
-                console.error(error);
-                showMessage("保存失敗: APIが応答していません。");
-            }
-        }
-
         function parseCSV(text) {
             const lines = text.split(/\r?\n/);
             return lines.map(line => {
@@ -334,13 +307,35 @@
         }
 
         function markCorrect() {
-            if (!currentQuestion) return;
-            updateCSVOnServer(currentQuestion.id, true);
+            if (!currentQuestion) {
+                showMessage('問題が表示されていません。');
+                return;
+            }
+            
+            const id = currentQuestion.id;
+            if (!records[id]) records[id] = { correct: 0, incorrect: 0 };
+            records[id].correct += 1;
+            
+            saveRecords(); // ローカルに保存
+            sendRecordToSheet(id, true); // スプレッドシートに送信
+            
+            showMessage(`番号 ${id} を「〇」として記録しました。`);
         }
 
         function markIncorrect() {
-            if (!currentQuestion) return;
-            updateCSVOnServer(currentQuestion.id, false);
+            if (!currentQuestion) {
+                showMessage('問題が表示されていません。');
+                return;
+            }
+
+            const id = currentQuestion.id;
+            if (!records[id]) records[id] = { correct: 0, incorrect: 0 };
+            records[id].incorrect += 1;
+            
+            saveRecords(); // ローカルに保存
+            sendRecordToSheet(id, false); // スプレッドシートに送信
+            
+            showMessage(`番号 ${id} を「×」として記録しました。`);
         }
 
         window.onload = loadQuestionsFromCSV;
