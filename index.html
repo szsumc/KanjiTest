@@ -30,7 +30,7 @@
 </head>
 <body class="bg-gray-50 text-gray-800 p-4 md:p-8">
 
-    <!-- 练习视图 (Main View) -->
+    <!-- 練習ビュー (Main View) -->
     <div id="practice-view" class="max-w-5xl mx-auto">
         <div class="flex justify-between items-center mb-2">
             <h1 class="text-2xl font-bold text-gray-700">中一漢字勉強</h1>
@@ -50,7 +50,15 @@
                 <label for="endNum" class="mr-2 text-sm font-medium">終了番号:</label>
                 <input type="number" id="endNum" value="100" min="1" class="border rounded px-2 py-1 w-20 text-center bg-yellow-50 focus:outline-none focus:ring-2 focus:ring-blue-400">
             </div>
-            <button onclick="loadQuestionsFromCSV()" class="text-xs bg-gray-200 hover:bg-gray-300 px-3 py-1 rounded transition-colors">CSVを再読込</button>
+            <div class="flex gap-2">
+                <button onclick="loadQuestionsFromCSV()" class="text-xs bg-gray-200 hover:bg-gray-300 px-3 py-1 rounded transition-colors">CSVを再読込</button>
+                <button onclick="downloadCSV()" class="text-xs bg-green-100 text-green-700 hover:bg-green-200 px-3 py-1 rounded transition-colors flex items-center gap-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    CSVダウンロード
+                </button>
+            </div>
         </div>
 
         <div class="flex flex-col md:flex-row gap-6">
@@ -101,7 +109,7 @@
         </div>
     </div>
 
-    <!-- 数据列表视图 (List View) -->
+    <!-- データ一覧ビュー (List View) -->
     <div id="list-view" class="max-w-6xl mx-auto hidden-view">
         <div class="flex justify-between items-center mb-6">
             <h1 class="text-2xl font-bold text-gray-700">漢字データ一覧</h1>
@@ -125,7 +133,7 @@
                         </tr>
                     </thead>
                     <tbody id="csv-table-body">
-                        <!-- 数据将通过 JS 动态插入 -->
+                        <!-- データは動的に挿入されます -->
                     </tbody>
                 </table>
             </div>
@@ -146,7 +154,7 @@
         }
 
         /**
-         * 视图切换函数
+         * ビュー切り替え
          */
         function switchView(viewName) {
             const practice = document.getElementById('practice-view');
@@ -163,7 +171,7 @@
         }
 
         /**
-         * 渲染数据表格
+         * データテーブルのレンダリング
          */
         function renderDataTable() {
             const tbody = document.getElementById('csv-table-body');
@@ -228,7 +236,47 @@
         }
 
         /**
-         * 写入 CSV (POST 请求后端)
+         * CSVをダウンロードする関数
+         */
+        function downloadCSV() {
+            if (questions.length === 0) {
+                showMessage("データがないためダウンロードできません。");
+                return;
+            }
+
+            // ヘッダー
+            let csvContent = "ID,Kanji,On-yomi,Kun-yomi,Jukugo,Correct,Incorrect\n";
+            
+            // 各行を生成
+            questions.forEach(q => {
+                const row = [
+                    q.id,
+                    `"${q.kanji.replace(/"/g, '""')}"`,
+                    `"${q.onyomi.replace(/"/g, '""')}"`,
+                    `"${q.kunyomi.replace(/"/g, '""')}"`,
+                    `"${q.jukugo.replace(/"/g, '""')}"`,
+                    q.correct,
+                    q.incorrect
+                ].join(",");
+                csvContent += row + "\n";
+            });
+
+            // Blob作成とダウンロード実行
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", "kanji_data.csv");
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            showMessage("最新のCSVをダウンロードしました。");
+        }
+
+        /**
+         * サーバー上のCSVを更新 (POST)
          */
         async function updateCSVOnServer(id, isCorrect) {
             try {
