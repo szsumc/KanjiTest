@@ -115,19 +115,7 @@
                     <button id="correct-btn" onclick="markCorrect()" class="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-8 rounded-lg shadow transition-colors text-4xl flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed" disabled>〇</button>
                     <button id="incorrect-btn" onclick="markIncorrect()" class="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-8 rounded-lg shadow transition-colors text-4xl flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed" disabled>×</button>
                 </div>
-                
-                <!-- AI判定表示エリア -->
-                <div id="ai-result-panel" class="bg-white border border-gray-200 rounded-lg p-3 shadow-sm min-h-[120px] flex flex-col justify-center items-center">
-                    <span class="text-xs text-gray-400 mb-1">AI 判定結果</span>
-                    <div id="ai-loading" class="hidden"><div class="loader mr-2"></div>解析中...</div>
-                    <div id="ai-status" class="text-2xl font-black">---</div>
-                    <div id="ai-comment" class="text-[10px] text-gray-500 mt-1 text-center leading-tight"></div>
-                </div>
-
-                <!-- AI結果記録ボタン -->
-                <button id="ai-record-btn" onclick="recordAiResult()" disabled class="bg-blue-600 disabled:bg-gray-300 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg shadow transition-colors">
-                    AIの判定で記録する
-                </button>
+                <button onclick="refreshQuestion()" class="bg-amber-500 hover:bg-amber-600 text-white font-bold py-4 rounded-lg shadow transition-colors text-lg">難問刷新</button>
 
             </div>
         </div>
@@ -148,9 +136,6 @@
       window.onload = function() {
         // 初始化 Canvas
         initCanvas();
-
-        // AIボタン初期化
-        document.getElementById('ai-record-btn').disabled = true;
 
         // 〇×ボタン初期化
         document.getElementById('correct-btn').disabled = true;
@@ -314,11 +299,6 @@
 
         // 刷新问時手書きエリアクリア
         clearCanvas();
-
-        // AI関連のリセット
-        document.getElementById('ai-status').innerText = '---';
-        document.getElementById('ai-comment').innerText = '';
-        document.getElementById('ai-record-btn').disabled = true;
       }
 
       function showAnswer() {
@@ -339,8 +319,6 @@
             document.getElementById('score-display').classList.remove('hidden');
         }).getScore(currentQuestion[0]);
 
-        // AI判定を開始
-        analyzeHandwriting();
       }
 
       function markCorrect() {
@@ -404,59 +382,6 @@
         }).updateCount(num, isCorrect);
       }
 
-      function analyzeHandwriting() {
-        
-        //skip
-        return;
-        
-        if (!currentQuestion) {
-          showMessage('先に問題を刷新してください。');
-          return;
-        }
-
-        // AI判定中表示
-        document.getElementById('ai-loading').classList.remove('hidden');
-        document.getElementById('ai-status').innerText = '---';
-        document.getElementById('ai-comment').innerText = '';
-        document.getElementById('ai-record-btn').disabled = true;
-
-        // Canvasをbase64に変換
-        const dataUrl = (canvas && canvas.toDataURL) ? canvas.toDataURL('image/png') : '';
-        const imageData = dataUrl.includes(',') ? dataUrl.split(',')[1] : '';
-
-        if (!imageData) {
-          console.error('imageData is undefined or empty', { canvas, dataUrl });
-          document.getElementById('ai-loading').classList.add('hidden');
-          showMessage('手書き画像の取得に失敗しました。ページを再読み込みしてください。');
-          return;
-        }
-
-        google.script.run
-          .withSuccessHandler(result => {
-            document.getElementById('ai-status').innerText = result.status;
-            document.getElementById('ai-comment').innerText = result.comment;
-            document.getElementById('ai-record-btn').disabled = false;
-            document.getElementById('ai-loading').classList.add('hidden');
-          })
-          .withFailureHandler(error => {
-            console.error('AI判定エラー:', error);
-            document.getElementById('ai-status').innerText = 'エラー';
-            document.getElementById('ai-comment').innerText = '判定に失敗しました';
-            document.getElementById('ai-loading').classList.add('hidden');
-          })
-          .analyzeHandwriting(imageData, currentQuestion[1]);
-      }
-
-      function recordAiResult() {
-        const status = document.getElementById('ai-status').innerText;
-        if (status === '正解') {
-          markCorrect();
-        } else if (status === '不正解') {
-          markIncorrect();
-        } else {
-          showMessage('AI判定が完了していません。');
-        }
-      }
     </script>
 </body>
 </html>
