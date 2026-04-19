@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>漢字勉強アプリ</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif; }
+        .toast {
+            visibility: hidden;
+            min-width: 250px;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 8px;
+            padding: 16px;
+            position: fixed;
+            z-index: 50;
+            left: 50%;
+            bottom: 30px;
+            transform: translateX(-50%);
+            opacity: 0;
+            transition: opacity 0.3s, bottom 0.3s;
+        }
+        .toast.show { visibility: visible; opacity: 1; bottom: 50px; }
+        .answer-kanji { font-size: 8rem; line-height: 1; }
+        .hidden-view { display: none; }
+                
+        /* 手書きエリアスタイル */
+        #hw-canvas {
+            touch-action: none; /* 手書きエリアスクロール防止 */
+            cursor: crosshair;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 p-4 md:p-8">
+
+    <!-- 練習ビュー (Main View) -->
+    <div id="practice-view" class="max-w-5xl mx-auto">
+        <div class="flex justify-between items-center mb-2">
+            <h1 class="text-2xl font-bold text-gray-700">漢字テスト</h1>
+        </div>
+        
+        <p class="text-sm text-slate-500">
+          データ元: <a href="https://docs.google.com/spreadsheets/d/1EdN4I40YlR_2CfSOhCzBK8f_S1mkHlCZCvslODzgzLc/edit?gid=0#gid=0" target="_blank" class="underline hover:text-blue-600">中一漢字集</a>
+        </p>
+
+        <!-- 設定エリア -->
+        <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6 flex flex-wrap items-center gap-4">
+            <div class="flex items-center">
+                <label for="startNum" class="mr-2 text-sm font-medium">開始番号:</label>
+                <input type="number" id="startNum" value="0" min="1" class="border rounded px-2 py-1 w-20 text-center focus:outline-none focus:ring-2 focus:ring-blue-400">
+            </div>
+            <div class="flex items-center">
+                <label for="endNum" class="mr-2 text-sm font-medium">終了番号:</label>
+                <input type="number" id="endNum" value="0" min="1" class="border rounded px-2 py-1 w-20 text-center bg-yellow-50 focus:outline-none focus:ring-2 focus:ring-blue-400">
+            </div>
+        </div>
+
+        <div class="flex flex-col md:flex-row gap-6">
+            <!-- 左側：問題・答えエリア -->
+            <div class="flex-1 space-y-6">
+                <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                    <h2 class="text-lg font-bold p-3 bg-gray-100 border-b">問題</h2>
+                    <div class="overflow-x-auto">
+                      <table class="w-full text-left border-collapse">
+                          <thead>
+                              <tr class="border-b text-sm text-gray-600">
+                                  <th class="p-3 border-r w-1/6 text-center">番号</th>
+                                  <th class="p-3 border-r w-1/6">音読み</th>
+                                  <th class="p-3 border-r w-1/4">訓読み</th>
+                                  <th class="p-3 w-5/12">熟語</th>
+                              </tr>
+                          </thead>
+                          <tbody>
+                              <tr>
+                                  <td id="q-num" class="p-3 border-r text-center text-xl font-bold h-14"></td>
+                                  <td id="q-on" class="p-3 border-r text-lg"></td>
+                                  <td id="q-kun" class="p-3 border-r text-lg"></td>
+                                  <td id="q-jukugo" class="p-3 text-lg"></td>
+                              </tr>
+                          </tbody>
+                      </table>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex flex-col h-[400px] md:h-96">
+                    <div class="flex justify-between items-center bg-gray-100 border-b p-3">
+                        <h2 class="text-lg font-bold">答え・手書き</h2>
+                        <button onclick="clearCanvas()" class="text-sm bg-gray-200 hover:bg-gray-300 px-3 py-1 rounded transition-colors text-gray-700">クリア (消去)</button>
+                    </div>
+                <div class="flex-1 flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-gray-200 relative">
+                    
+                    <div class="w-full md:w-2/5 flex items-center justify-center relative bg-white">
+                        <span id="answer-text" class="answer-kanji text-gray-800 select-all font-serif"></span>
+                        <div id="score-display" class="absolute bottom-7 left-0 right-0 text-center text-xs text-gray-400 hidden">
+                            累計成績: <span class="text-green-600 font-bold">〇 <span id="score-correct">0</span></span> / <span class="text-red-600 font-bold">× <span id="score-incorrect">0</span></span>
+                        </div>
+                    </div>
+
+                    <div class="w-full md:w-3/5 relative bg-gray-50" id="canvas-container">
+                        <canvas id="hw-canvas" class="w-full h-full"></canvas>
+                        <div class="absolute top-2 right-2 text-gray-300 pointer-events-none text-sm border border-gray-200 rounded px-1">手書きエリア</div>
+                    </div>
+                </div>
+                </div>
+            </div>
+
+            <!-- 右側：操作ボタンエリア -->
+            <div class="w-full md:w-64 flex flex-col gap-4">
+                <button onclick="refreshQuestion()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-6 rounded-lg shadow-md transition-colors text-lg">問題刷新</button>
+                <button onclick="showAnswer()" class="bg-white hover:bg-gray-100 text-blue-600 font-bold py-4 rounded-lg shadow border border-blue-600 transition-colors text-lg">答え表示</button>
+                <div class="flex gap-4 mt-4">
+                    <button id="correct-btn" onclick="markCorrect()" class="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-8 rounded-lg shadow transition-colors text-4xl flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed" disabled>〇</button>
+                    <button id="incorrect-btn" onclick="markIncorrect()" class="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-8 rounded-lg shadow transition-colors text-4xl flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed" disabled>×</button>
+                </div>
+                
+                <!-- AI判定表示エリア -->
+                <div id="ai-result-panel" class="bg-white border border-gray-200 rounded-lg p-3 shadow-sm min-h-[120px] flex flex-col justify-center items-center">
+                    <span class="text-xs text-gray-400 mb-1">AI 判定結果</span>
+                    <div id="ai-loading" class="hidden"><div class="loader mr-2"></div>解析中...</div>
+                    <div id="ai-status" class="text-2xl font-black">---</div>
+                    <div id="ai-comment" class="text-[10px] text-gray-500 mt-1 text-center leading-tight"></div>
+                </div>
+
+                <!-- AI結果記録ボタン -->
+                <button id="ai-record-btn" onclick="recordAiResult()" disabled class="bg-blue-600 disabled:bg-gray-300 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg shadow transition-colors">
+                    AIの判定で記録する
+                </button>
+
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast shadow-lg border border-gray-600"></div>
+
+    <script>
+      let kanjiData = [];
+      let currentQuestion = null;
+      let setResultCompleted = false;
+      let isAnswerShown = false;
+
+      // 手書きエリア変数
+      let canvas, ctx, drawing = false;
+
+      // 起動時にデータを一括取得
+      window.onload = function() {
+        // 初始化 Canvas
+        initCanvas();
+
+        // AIボタン初期化
+        document.getElementById('ai-record-btn').disabled = true;
+
+        // 〇×ボタン初期化
+        document.getElementById('correct-btn').disabled = true;
+        document.getElementById('incorrect-btn').disabled = true;
+
+        google.script.run.withSuccessHandler(function(data) {
+          if (data) {
+            // ヘッダーを除外して保存
+            kanjiData = data.slice(1);
+            console.log("Data loaded: " + kanjiData.length + " rows");
+
+            // 末尾から逆順にループして、最初の有効な番号を探す
+            let lastFoundNum = "";
+            for (let i = kanjiData.length - 1; i >= 0; i--) {
+              const row = kanjiData[i];
+              const num = row[0] ? row[0].toString().trim() : "";
+              
+              // 番号が空でなく、数値として有効な場合
+              if (num !== "" && !isNaN(parseInt(num))) {
+                lastFoundNum = num;
+                break; // 見つかった時点でループ終了
+              }
+            }
+            // 見つかった番号をセット（見つからなかった場合はデフォルト値などを考慮）
+            if (lastFoundNum !== "") {
+              document.getElementById('startNum').value = 1;
+              document.getElementById('endNum').value = lastFoundNum;
+              console.log("End number set to: " + lastFoundNum);
+            }
+          } else {
+            showMessage("シート「漢字集」が見つかりません。");
+          }
+        }).getKanjiData();
+      };
+      
+      function initCanvas() {
+        canvas = document.getElementById('hw-canvas');
+        ctx = canvas.getContext('2d');
+        
+        // 自适应分辨率
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // 绘图设置
+        ctx.strokeStyle = '#1e293b'; // 墨色
+        ctx.lineWidth = 4;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        // 鼠标事件
+        canvas.addEventListener('mousedown', startDrawing);
+        canvas.addEventListener('mousemove', draw);
+        window.addEventListener('mouseup', stopDrawing);
+
+        // 触摸事件
+        canvas.addEventListener('touchstart', (e) => {
+            const touch = e.touches[0];
+            const mouseEvent = new MouseEvent("mousedown", {
+                clientX: touch.clientX,
+                clientY: touch.clientY
+            });
+            canvas.dispatchEvent(mouseEvent);
+            e.preventDefault();
+        }, { passive: false });
+
+        canvas.addEventListener('touchmove', (e) => {
+            const touch = e.touches[0];
+            const mouseEvent = new MouseEvent("mousemove", {
+                clientX: touch.clientX,
+                clientY: touch.clientY
+            });
+            canvas.dispatchEvent(mouseEvent);
+            e.preventDefault();
+        }, { passive: false });
+      }
+
+      function resizeCanvas() {
+        const container = document.getElementById('canvas-container');
+        // 保存当前绘图内容（可选，如果不希望调整大小时清空）
+        const tempImg = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        canvas.width = container.offsetWidth;
+        canvas.height = container.offsetHeight;
+        // 恢复设置
+        ctx.strokeStyle = '#1e293b';
+        ctx.lineWidth = 4;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+      }
+
+      function startDrawing(e) {
+        drawing = true;
+        ctx.beginPath();
+        const rect = canvas.getBoundingClientRect();
+        ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+      }
+
+      function draw(e) {
+        if (!drawing) return;
+        const rect = canvas.getBoundingClientRect();
+        ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+        ctx.stroke();
+      }
+
+      function stopDrawing() {
+        drawing = false;
+        ctx.closePath();
+      }
+
+      function clearCanvas() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+
+      function showMessage(msg) {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.classList.add('show');
+            setTimeout(() => { toast.classList.remove('show'); }, 3000);
+      }
+
+      function refreshQuestion() {
+        // 入力値の取得
+        const start = parseInt(document.getElementById('startNum').value);
+        const end = parseInt(document.getElementById('endNum').value);
+
+        if (isNaN(start) || isNaN(end)) {
+          showMessage("開始番号と終了番号を数値で入力してください。");
+          return;
+        }
+
+        // フィルタリング: A列(row[0])が番号、開始～終了の範囲内にあるか
+        const filtered = kanjiData.filter(row => {
+          const num = parseInt(row[0]);
+          return num >= start && num <= end;
+        });
+
+        if (filtered.length === 0) {
+          showMessage("指定範囲（" + start + "〜" + end + "）にデータがありません。");
+          return;
+        }
+
+        // ランダム抽出
+        currentQuestion = filtered[Math.floor(Math.random() * filtered.length)];
+
+        // 画面への反映 (A列:番号, D列:音読み)
+        // index.html内のid名（q-num, q-onなど）に合わせて書き換えてください
+        document.getElementById('q-num').innerText = currentQuestion[0]; // A列
+        document.getElementById('q-on').innerText = currentQuestion[3];  // D列
+        document.getElementById('q-kun').innerText = currentQuestion[4];  // E列
+        document.getElementById('q-jukugo').innerText = currentQuestion[6];  // F列
+
+        // 答えと成績を隠す
+        document.getElementById('answer-text').innerText = ""; 
+        document.getElementById('score-display').classList.add('hidden');
+        isAnswerShown = false;
+
+        setResultCompleted = false;
+
+        // 〇×ボタンを無効化
+        document.getElementById('correct-btn').disabled = true;
+        document.getElementById('incorrect-btn').disabled = true;
+
+        // 刷新问時手書きエリアクリア
+        clearCanvas();
+
+        // AI関連のリセット
+        document.getElementById('ai-status').innerText = '---';
+        document.getElementById('ai-comment').innerText = '';
+        document.getElementById('ai-record-btn').disabled = true;
+      }
+
+      function showAnswer() {
+        if (!currentQuestion) return;
+        
+        // 答えを表示
+        document.getElementById('answer-text').innerText = currentQuestion[1]; // B列
+        isAnswerShown = true;
+
+        // 〇×ボタンを有効化
+        document.getElementById('correct-btn').disabled = false;
+        document.getElementById('incorrect-btn').disabled = false;
+
+        // 累計成績を取得して表示
+        google.script.run.withSuccessHandler(score => {
+            document.getElementById('score-correct').innerText = score.correct;
+            document.getElementById('score-incorrect').innerText = score.incorrect;
+            document.getElementById('score-display').classList.remove('hidden');
+        }).getScore(currentQuestion[0]);
+
+        // AI判定を開始
+        analyzeHandwriting();
+      }
+
+      function markCorrect() {
+        
+        if(!isAnswerShown){
+          showMessage("答えは表示されていません。表示してから採点。");
+            return;
+        }
+
+        if(setResultCompleted){
+          showMessage("すでに採点済みでした。問題を刷新してください。");
+          return;
+        }
+
+        updateRecord(true);
+      }
+
+      function markIncorrect() {
+        
+        if(!isAnswerShown){
+          showMessage("答えは表示されていません。表示してから採点。");
+            return;
+        }
+
+        if(setResultCompleted){
+          showMessage("すでに採点済みでした。問題を刷新してください。");
+          return;
+        }
+
+        updateRecord(false);
+      }
+
+      function updateRecord(isCorrect) {
+        const num = document.getElementById('q-num').innerText;
+        
+        // 番号や答えが表示されていない場合（初期状態など）のチェック
+        if (!num || num === "") {
+          showMessage("問題が読み込まれていません。先に「問題刷新」を押してください。");
+          return;
+        }
+
+        // Google Apps Scriptの関数を呼び出し
+        google.script.run.withSuccessHandler(function(success) {
+
+          if (success) {
+            // 画面上のカウンターを更新
+            setResultCompleted = true;
+            const id = isCorrect ? 'score-correct' : 'score-incorrect';
+            const el = document.getElementById(id);
+            el.innerText = parseInt(el.innerText) + 1;
+            
+            // 〇×ボタンを無効化
+            document.getElementById('correct-btn').disabled = true;
+            document.getElementById('incorrect-btn').disabled = true;
+            
+            // 連続で押せないようにするか、次の問題を自動で出す場合はここで refreshQuestion() を呼ぶ
+            showMessage(isCorrect ? "正解を記録しました！" : "不正解を記録しました。");
+          } else {
+            showMessage("エラー：該当する番号がシートに見つかりませんでした。");
+          }
+        }).updateCount(num, isCorrect);
+      }
+
+      function analyzeHandwriting() {
+        
+        //skip
+        return;
+        
+        if (!currentQuestion) {
+          showMessage('先に問題を刷新してください。');
+          return;
+        }
+
+        // AI判定中表示
+        document.getElementById('ai-loading').classList.remove('hidden');
+        document.getElementById('ai-status').innerText = '---';
+        document.getElementById('ai-comment').innerText = '';
+        document.getElementById('ai-record-btn').disabled = true;
+
+        // Canvasをbase64に変換
+        const dataUrl = (canvas && canvas.toDataURL) ? canvas.toDataURL('image/png') : '';
+        const imageData = dataUrl.includes(',') ? dataUrl.split(',')[1] : '';
+
+        if (!imageData) {
+          console.error('imageData is undefined or empty', { canvas, dataUrl });
+          document.getElementById('ai-loading').classList.add('hidden');
+          showMessage('手書き画像の取得に失敗しました。ページを再読み込みしてください。');
+          return;
+        }
+
+        google.script.run
+          .withSuccessHandler(result => {
+            document.getElementById('ai-status').innerText = result.status;
+            document.getElementById('ai-comment').innerText = result.comment;
+            document.getElementById('ai-record-btn').disabled = false;
+            document.getElementById('ai-loading').classList.add('hidden');
+          })
+          .withFailureHandler(error => {
+            console.error('AI判定エラー:', error);
+            document.getElementById('ai-status').innerText = 'エラー';
+            document.getElementById('ai-comment').innerText = '判定に失敗しました';
+            document.getElementById('ai-loading').classList.add('hidden');
+          })
+          .analyzeHandwriting(imageData, currentQuestion[1]);
+      }
+
+      function recordAiResult() {
+        const status = document.getElementById('ai-status').innerText;
+        if (status === '正解') {
+          markCorrect();
+        } else if (status === '不正解') {
+          markIncorrect();
+        } else {
+          showMessage('AI判定が完了していません。');
+        }
+      }
+    </script>
+</body>
+</html>
