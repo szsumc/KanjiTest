@@ -18,6 +18,20 @@ function getKanjiData() {
   }
 }
 
+// 難問リストシートから全データを取得
+function getHardKanjiData() {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName('難問リスト'); // シート名を「難問リスト」に指定
+    if (!sheet) return null;
+    
+    const data = sheet.getDataRange().getValues();
+    return data; // 1行目がヘッダーなら .slice(1) を使う
+  } catch (e) {
+    return null;
+  }
+}
+
 // 行番号を検索して、正解または不正解のカウントを更新する
 function updateCount(num, isCorrect) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('漢字集');

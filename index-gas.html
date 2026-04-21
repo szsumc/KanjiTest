@@ -115,7 +115,7 @@
                     <button id="correct-btn" onclick="markCorrect()" class="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-8 rounded-lg shadow transition-colors text-4xl flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed" disabled>〇</button>
                     <button id="incorrect-btn" onclick="markIncorrect()" class="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-8 rounded-lg shadow transition-colors text-4xl flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed" disabled>×</button>
                 </div>
-                <button onclick="refreshQuestion()" class="bg-amber-500 hover:bg-amber-600 text-white font-bold py-4 rounded-lg shadow transition-colors text-lg">難問刷新</button>
+                <button onclick="refreshHardQuestion()" class="bg-amber-500 hover:bg-amber-600 text-white font-bold py-4 rounded-lg shadow transition-colors text-lg">難問刷新</button>
 
             </div>
         </div>
@@ -299,6 +299,61 @@
 
         // 刷新问時手書きエリアクリア
         clearCanvas();
+      }
+
+      function refreshHardQuestion() {
+        // 入力値の取得
+        const start = parseInt(document.getElementById('startNum').value);
+        const end = parseInt(document.getElementById('endNum').value);
+
+        if (isNaN(start) || isNaN(end)) {
+          showMessage("開始番号と終了番号を数値で入力してください。");
+          return;
+        }
+
+        // 難問リストからデータを取得
+        google.script.run.withSuccessHandler(function(data) {
+          if (data) {
+            // ヘッダーを除外して保存
+            const hardKanjiData = data.slice(1);
+
+            // フィルタリング: A列(row[0])が番号、開始～終了の範囲内にあるか
+            const filtered = hardKanjiData.filter(row => {
+              const num = parseInt(row[0]);
+              return num >= start && num <= end;
+            });
+
+            if (filtered.length === 0) {
+              showMessage("指定範囲（" + start + "〜" + end + "）に難問データがありません。");
+              return;
+            }
+
+            // ランダム抽出
+            currentQuestion = filtered[Math.floor(Math.random() * filtered.length)];
+
+            // 画面への反映 (A列:番号, D列:音読み)
+            document.getElementById('q-num').innerText = currentQuestion[0]; // A列
+            document.getElementById('q-on').innerText = currentQuestion[3];  // D列
+            document.getElementById('q-kun').innerText = currentQuestion[4];  // E列
+            document.getElementById('q-jukugo').innerText = currentQuestion[6];  // F列
+
+            // 答えと成績を隠す
+            document.getElementById('answer-text').innerText = ""; 
+            document.getElementById('score-display').classList.add('hidden');
+            isAnswerShown = false;
+
+            setResultCompleted = false;
+
+            // 〇×ボタンを無効化
+            document.getElementById('correct-btn').disabled = true;
+            document.getElementById('incorrect-btn').disabled = true;
+
+            // 刷新问時手書きエリアクリア
+            clearCanvas();
+          } else {
+            showMessage("シート「難問リスト」が見つかりません。");
+          }
+        }).getHardKanjiData();
       }
 
       function showAnswer() {
